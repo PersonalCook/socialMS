@@ -25,4 +25,9 @@ app.include_router(saved.router)
 
 @app.get("/")
 def root():
-    return {"msg": "Search Service running in Docker!"}
+    return {"msg": "Social Service running in Docker!"}
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
