@@ -6,6 +6,7 @@ import httpx
 from .. import schemas
 from ..crud.comments import create_comment as create_comment_crud, get_comment, delete_comment as delete_comment_crud, get_comments_for_recipe, count_comments
 from ..utils.auth import get_current_user_id
+from ..metrics import comments_total
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
@@ -26,16 +27,38 @@ async def create_comment(
     comment: schemas.CommentCreate, 
     recipe_id: int,  
     user_id: int = Depends(get_current_user_id), 
-    db: Session = Depends(get_db)):
+    db: Session = Depends(get_db),
+):
+    status_ = "success"
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(f"{RECIPE_SERVICE_URL}/{recipe_id}")
-        if response.status_code != 200:
-            raise HTTPException(status_code=404, detail="Recipe not found")
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{RECIPE_SERVICE_URL}/{recipe_id}")
+            if response.status_code != 200:
+                status_ = "error"
+                raise HTTPException(status_code=404, detail="Recipe not found")
 
+        new_comment = create_comment_crud(
+            db=db,
+            comment=comment,
+            user_id=user_id,
+            recipe_id=recipe_id,
+        )
+        return new_comment
 
-    new_comment = create_comment_crud(db=db, comment=comment, user_id=user_id, recipe_id=recipe_id)
-    return new_comment
+    except HTTPException:
+        status_ = "error"
+        raise
+
+    except Exception as e:
+        status_ = "error"
+        raise HTTPException(status_code=502, detail=str(e))
+
+    finally:
+        comments_total.labels(
+            source="api",
+            status=status_,
+        ).inc()
 
 @router.get("/comment/{comment_id}", response_model=schemas.Comment)
 def read_comment(comment_id: int, db: Session = Depends(get_db)):

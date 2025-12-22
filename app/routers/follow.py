@@ -6,6 +6,7 @@ import httpx
 from .. import schemas
 from ..crud.follow import follow_user, get_follow, get_followers, get_following, unfollow_user
 from ..utils.auth import get_current_user_id
+from ..metrics import follows_total
 
 router = APIRouter(prefix="/follows", tags=["Follows"])
 
@@ -28,35 +29,70 @@ async def create_follow(following_id: int,
                         follower_id: int = Depends(get_current_user_id), 
                         db: Session = Depends(get_db)):
 
-    if following_id == follower_id:
-        raise HTTPException(status_code=400, detail="Cannot follow yourself")
-    
-    existing = get_follow(db, follower_id=follower_id, following_id=following_id)
-    if existing:
-        raise HTTPException(status_code=400, detail="Already following this user")
-
-    async with httpx.AsyncClient() as client:
-        response = await client.get(f"{USER_SERVICE_URL}/{following_id}")
-        if response.status_code != 200:
-            raise HTTPException(status_code=404, detail="User to follow not found")
+    status_ = "success"
+    action = "follow"
+    try:
+        if following_id == follower_id:
+            status_ ="error"
+            raise HTTPException(status_code=400, detail="Cannot follow yourself")
         
-    
-    follow = follow_user(db, follower_id=follower_id, following_id=following_id)
+        existing = get_follow(db, follower_id=follower_id, following_id=following_id)
+        if existing:
+            status_ ="error"
+            raise HTTPException(status_code=400, detail="Already following this user")
 
-    
-    return follow
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{USER_SERVICE_URL}/{following_id}")
+            if response.status_code != 200:
+                status_ ="error"
+                raise HTTPException(status_code=404, detail="User to follow not found")
+            
+        
+        follow = follow_user(db, follower_id=follower_id, following_id=following_id)
+
+        
+        return follow
+    except HTTPException:
+        status_ = "error"
+        raise
+
+    except Exception as e:
+        status_ = "error"
+        raise HTTPException(status_code=502, detail=str(e))
+
+    finally:
+        follows_total.labels(
+            source="api",
+            action=action,
+            status=status_
+        ).inc()
 
 @router.delete("/{following_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_follow(following_id: int, follower_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    status_ = "success"
+    action = "unfollow"
+    try:
+        existing = get_follow(db, follower_id=follower_id, following_id=following_id)
+        if not existing:
+            status_ ="error"
+            raise HTTPException(status_code=404, detail="Follow relationship not found")
 
-    existing = get_follow(db, follower_id=follower_id, following_id=following_id)
-    if not existing:
-        raise HTTPException(status_code=404, detail="Follow relationship not found")
 
+        unfollow_user(db, follower_id=follower_id, following_id=following_id)
 
-    unfollow_user(db, follower_id=follower_id, following_id=following_id)
-
-    return None
+        return None
+    except HTTPException:
+        status_ = "error"
+        raise
+    except Exception as e:
+        status_ = "error"
+        raise HTTPException(status_code=502, detail=str(e))
+    finally:
+        follows_total.labels(
+            source="api",
+            action=action,
+            status=status_
+        ).inc()
 
 @router.get("/followers/me", response_model=list[schemas.Follow])
 def get_my_followers(follower_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):

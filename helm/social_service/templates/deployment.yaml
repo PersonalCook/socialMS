@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: social-service
-          image: piasotlar/social_service:v2
+          image: piasotlar/social_service:v3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

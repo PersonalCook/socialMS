@@ -14,6 +14,7 @@ from ..crud.likes import (
     get_like_by_user_and_recipe,
 )
 from ..utils.auth import get_current_user_id
+from ..metrics import likes_total
 
 router = APIRouter(prefix="/likes", tags=["Likes"])
 
@@ -34,19 +35,30 @@ def get_db():
 async def create_like(recipe_id: int, 
                       user_id: int = Depends(get_current_user_id), 
                       db: Session = Depends(get_db)):
+    status_ = "success"
+    action = "like"
+    try:
+        existing = get_like_by_user_and_recipe(db, user_id=user_id, recipe_id=recipe_id)
+        if existing:
+            status_ ="error"
+            raise HTTPException(status_code=400, detail="Recipe already liked")
 
-    # prevent duplicate likes by same user on same recipe
-    existing = get_like_by_user_and_recipe(db, user_id=user_id, recipe_id=recipe_id)
-    if existing:
-        raise HTTPException(status_code=400, detail="Recipe already liked")
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{RECIPE_SERVICE_URL}/{recipe_id}")
+            if response.status_code != 200:
+                status_ ="error"
+                raise HTTPException(status_code=404, detail="Recipe not found")
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(f"{RECIPE_SERVICE_URL}/{recipe_id}")
-        if response.status_code != 200:
-            raise HTTPException(status_code=404, detail="Recipe not found")
-
-    new_like = create_like_crud(db=db, user_id=user_id, recipe_id=recipe_id)
-    return new_like
+        new_like = create_like_crud(db=db, user_id=user_id, recipe_id=recipe_id)
+        return new_like
+    except HTTPException:
+        status_ = "error"
+        raise
+    except Exception as e:
+        status_ = "error"
+        raise HTTPException(status_code=502, detail=str(e))
+    finally:
+        likes_total.labels(source="api", action=action, status=status_).inc()
 
 @router.get("/like/{like_id}", response_model=schemas.Like)
 def read_like(like_id: int, db: Session = Depends(get_db)):
@@ -77,20 +89,35 @@ def delete_like(like_id: int,
                 user_id: int  = Depends(get_current_user_id),
                 db: Session = Depends(get_db)):
     
-    like = get_like(db, like_id=like_id)
+    status_ = "success"
+    action = "unlike"
+    try:
 
-    if not like:
-        raise HTTPException(status_code=404, detail="Like not found")
-    
-    if like.user_id != user_id:
-        raise HTTPException(status_code=403, detail="You can delete only your own likes")
-    
-    success = delete_like_crud(db, like_id)
+        like = get_like(db, like_id=like_id)
 
-    if not success:
-        raise HTTPException(status_code=404, detail="Like not deleted")
+        if not like:
+            status_ ="error"
+            raise HTTPException(status_code=404, detail="Like not found")
+        
+        if like.user_id != user_id:
+            status_ ="error"
+            raise HTTPException(status_code=403, detail="You can delete only your own likes")
+        
+        success = delete_like_crud(db, like_id)
 
-    return None
+        if not success:
+            status_ ="error"
+            raise HTTPException(status_code=404, detail="Like not deleted")
+
+        return None
+    except HTTPException:
+        status_ = "error"
+        raise
+    except Exception as e:
+        status_ = "error"
+        raise HTTPException(status_code=502, detail=str(e))
+    finally:
+        likes_total.labels(source="api", action=action, status=status_).inc()
 
 @router.get("/count/{recipe_id}")
 def count_likes_endpoint(recipe_id: int, db: Session = Depends(get_db)):
