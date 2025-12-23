@@ -5,15 +5,12 @@ metadata:
   namespace: personalcook
   labels:
     app: social-service
-  annotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "8000"
-    prometheus.io/path: "/metrics"
 spec:
   selector:
     app: social-service
   ports:
-    - port: 8000
+    - name: http
+      port: 8000
       targetPort: 8000
       protocol: TCP
   type: ClusterIP
