@@ -15,8 +15,8 @@ spec:
     spec:
       containers:
         - name: social-service
-          image: piasotlar/social_service:v3
-          imagePullPolicy: IfNotPresent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
           ports:
             - containerPort: 8000
 
