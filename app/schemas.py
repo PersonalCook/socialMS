@@ -46,3 +46,25 @@ class Follow(BaseModel):
     class Config:
         orm_mode = True 
 
+
+class ErrorResponse(BaseModel):
+    detail: str
+
+
+class RootResponse(BaseModel):
+    msg: str
+
+
+class HealthResponse(BaseModel):
+    status: str
+
+
+class LikeCountResponse(BaseModel):
+    recipe_id: int
+    like_count: int
+
+
+class CommentCountResponse(BaseModel):
+    recipe_id: int
+    comment_count: int
+

@@ -14,3 +14,16 @@ Social service for PersonalCook.
 ## Ports
 - API: 8003
 - Postgres: 5434
+
+## API Docs
+- Swagger UI: http://localhost:8003/docs
+- ReDoc: http://localhost:8003/redoc
+- OpenAPI JSON: http://localhost:8003/openapi.json
+
+## CI
+This repo runs two GitHub Actions jobs:
+- test: installs requirements and runs `pytest`
+- container: builds the Docker image, starts Postgres, runs the container, and hits `/` for a smoke test
+
+Tests (files and intent):
+- `tests/test_social_routes.py`: follow/like/save/comment endpoints with mocked recipe/user checks.

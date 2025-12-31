@@ -10,6 +10,39 @@ from ..metrics import saved_items_total
 
 router = APIRouter(prefix="/saved", tags=["Saved"])
 
+EXAMPLE_SAVED = {
+    "saved_id": 1,
+    "user_id": 2,
+    "recipe_id": 10,
+    "created_at": "2025-01-01T12:00:00",
+}
+
+ERROR_400 = {
+    "model": schemas.ErrorResponse,
+    "description": "Bad request",
+    "content": {"application/json": {"example": {"detail": "Recipe already saved"}}},
+}
+ERROR_401 = {
+    "model": schemas.ErrorResponse,
+    "description": "Unauthorized",
+    "content": {"application/json": {"example": {"detail": "Invalid or expired token"}}},
+}
+ERROR_403 = {
+    "model": schemas.ErrorResponse,
+    "description": "Forbidden",
+    "content": {"application/json": {"example": {"detail": "You can only unsave your own saved recipes"}}},
+}
+ERROR_404 = {
+    "model": schemas.ErrorResponse,
+    "description": "Not found",
+    "content": {"application/json": {"example": {"detail": "Saved recipe not found"}}},
+}
+ERROR_502 = {
+    "model": schemas.ErrorResponse,
+    "description": "Upstream error",
+    "content": {"application/json": {"example": {"detail": "Recipe service unavailable"}}},
+}
+
 RECIPE_SERVICE_URL = os.getenv("RECIPE_SERVICE_URL")
 
 if not RECIPE_SERVICE_URL:
@@ -22,7 +55,20 @@ def get_db():
     finally:
         db.close()
 
-@router.post("/{recipe_id}", response_model=schemas.SavedRecipe, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/{recipe_id}",
+    response_model=schemas.SavedRecipe,
+    status_code=status.HTTP_201_CREATED,
+    summary="Save recipe",
+    responses={
+        201: {"description": "Created", "content": {"application/json": {"example": EXAMPLE_SAVED}}},
+        400: ERROR_400,
+        401: ERROR_401,
+        404: ERROR_404,
+        422: {"description": "Validation error"},
+        502: ERROR_502,
+    },
+)
 async def create_saved(recipe_id: int, 
                        user_id: int = Depends(get_current_user_id), 
                        db: Session = Depends(get_db)):
@@ -52,14 +98,34 @@ async def create_saved(recipe_id: int,
         saved_items_total.labels(source="api", action=action, status=status_).inc()  
 
 
-@router.get("/my", response_model=list[schemas.SavedRecipe])
+@router.get(
+    "/my",
+    response_model=list[schemas.SavedRecipe],
+    summary="List my saved recipes",
+    responses={
+        200: {"description": "OK", "content": {"application/json": {"example": [EXAMPLE_SAVED]}}},
+        401: ERROR_401,
+        422: {"description": "Validation error"},
+        500: {"model": schemas.ErrorResponse, "description": "Internal error"},
+    },
+)
 def get_saved_recipes(user_id: int  = Depends(get_current_user_id), db: Session = Depends(get_db)):
     saved_recipes = get_saved_for_user(db, user_id=user_id)
 
     return saved_recipes
 
 
-@router.get("/recipe/{recipe_id}/me", response_model=schemas.SavedRecipe | None)
+@router.get(
+    "/recipe/{recipe_id}/me",
+    response_model=schemas.SavedRecipe | None,
+    summary="Get my saved entry for recipe",
+    responses={
+        200: {"description": "OK", "content": {"application/json": {"example": EXAMPLE_SAVED}}},
+        401: ERROR_401,
+        422: {"description": "Validation error"},
+        500: {"model": schemas.ErrorResponse, "description": "Internal error"},
+    },
+)
 def get_my_saved_for_recipe(
     recipe_id: int,
     user_id: int = Depends(get_current_user_id),
@@ -68,7 +134,19 @@ def get_my_saved_for_recipe(
     saved = get_saved_by_user_and_recipe(db, user_id=user_id, recipe_id=recipe_id)
     return saved
 
-@router.delete("/{saved_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{saved_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Unsave recipe",
+    responses={
+        204: {"description": "Deleted"},
+        401: ERROR_401,
+        403: ERROR_403,
+        404: ERROR_404,
+        422: {"description": "Validation error"},
+        502: ERROR_502,
+    },
+)
 def delete_saved(saved_id: int, user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     status_ = "success"
     action = "unsave"
