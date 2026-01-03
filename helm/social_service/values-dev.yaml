@@ -37,7 +37,8 @@ env:
       secretKeyRef:
         name: app-secrets
         key: jwt-secret
-
+  - name: ROOT_PATH
+    value: "/api/social"
 readinessProbe:
   httpGet:
     path: /health
