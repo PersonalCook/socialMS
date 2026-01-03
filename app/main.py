@@ -15,12 +15,16 @@ from .metrics import (
     request_latency,
     requests_in_progress
 )
+import os
 
 app = FastAPI(title="Social Service")
 
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173")
+allow_origins = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
