@@ -55,6 +55,15 @@ def get_db():
     finally:
         db.close()
 
+async def recipe_exists(recipe_id: int) -> bool:
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        r = await client.get(f"{RECIPE_SERVICE_URL}/{recipe_id}")
+        if r.status_code == 200:
+            return True
+        if r.status_code == 404:
+            return False
+        return True
+
 @router.post(
     "/{recipe_id}",
     response_model=schemas.SavedRecipe,
@@ -109,8 +118,24 @@ async def create_saved(recipe_id: int,
         500: {"model": schemas.ErrorResponse, "description": "Internal error"},
     },
 )
-def get_saved_recipes(user_id: int  = Depends(get_current_user_id), db: Session = Depends(get_db)):
+async def get_saved_recipes(
+    user_id: int = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
     saved_recipes = get_saved_for_user(db, user_id=user_id)
+
+    stale = []
+    for s in saved_recipes:
+        ok = await recipe_exists(s.recipe_id)
+        if not ok:
+            stale.append(s)
+
+    if stale:
+        for s in stale:
+            db.delete(s)
+        db.commit()
+
+        saved_recipes = get_saved_for_user(db, user_id=user_id)
 
     return saved_recipes
 
@@ -126,14 +151,22 @@ def get_saved_recipes(user_id: int  = Depends(get_current_user_id), db: Session 
         500: {"model": schemas.ErrorResponse, "description": "Internal error"},
     },
 )
-def get_my_saved_for_recipe(
+async def get_my_saved_for_recipe(
     recipe_id: int,
     user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
     saved = get_saved_by_user_and_recipe(db, user_id=user_id, recipe_id=recipe_id)
-    return saved
+    if not saved:
+        return None
 
+    ok = await recipe_exists(recipe_id)
+    if not ok:
+        db.delete(saved)
+        db.commit()
+        return None
+
+    return saved
 @router.delete(
     "/{saved_id}",
     status_code=status.HTTP_204_NO_CONTENT,
