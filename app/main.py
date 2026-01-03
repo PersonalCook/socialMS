@@ -17,7 +17,13 @@ from .metrics import (
 )
 import os
 
-app = FastAPI(title="Social Service")
+
+ROOT_PATH = os.getenv("ROOT_PATH", "").rstrip("/")
+
+app = FastAPI(
+    title="Social Service",
+    root_path=ROOT_PATH,
+)
 
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "http://localhost:5173")
 allow_origins = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]

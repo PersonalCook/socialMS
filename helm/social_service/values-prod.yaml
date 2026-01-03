@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: piasotlar/social_service
-  tag: latest
+  tag: v17
   pullPolicy: IfNotPresent
 
 imagePullSecrets: []
@@ -20,7 +20,7 @@ service:
 configMap:
   enabled: true
   data:
-    CORS_ORIGINS: "http://134.112.128.83"
+    CORS_ORIGINS: "http://134.112.152.8"
     JWT_ALGORITHM: "HS256"
     RECIPE_SERVICE_URL: "http://recipe-service:8000/recipes"
     USER_SERVICE_URL: "http://user-service:8000/users"
@@ -37,6 +37,9 @@ env:
       secretKeyRef:
         name: app-secrets
         key: jwt-secret
+
+  - name: ROOT_PATH
+    value: "/api/social"
 
 readinessProbe:
   httpGet:
