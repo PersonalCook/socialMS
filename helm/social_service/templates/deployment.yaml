@@ -1,57 +1,60 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: social-service
-  namespace: personalcook
+  name: {{ include "social_service.fullname" . }}
+  labels:
+    {{- include "social_service.labels" . | nindent 4 }}
 spec:
-  replicas: 1
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
-      app: social-service
+      {{- include "social_service.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: social-service
+        {{- include "social_service.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
       containers:
         - name: social-service
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
+
           ports:
-            - containerPort: 8000
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
 
+          {{- if .Values.configMap.enabled }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "social_service.fullname" . }}-config
+          {{- end }}
+
+          {{- if .Values.env }}
           env:
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: social-service-db
-                  key: DATABASE_URL
+            {{- toYaml .Values.env | nindent 12 }}
+          {{- end }}
 
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: app-secrets
-                  key: jwt-secret
-
-            - name: JWT_ALGORITHM
-              value: HS256
-
-            - name: RECIPE_SERVICE_URL
-              value: http://recipe-service:8000/recipes
-
-            - name: USER_SERVICE_URL
-              value: http://user-service:8000/users
-
+          {{- with .Values.readinessProbe }}
           readinessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 10
-            periodSeconds: 10
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
 
+          {{- with .Values.livenessProbe }}
           livenessProbe:
-            httpGet:
-              path: /health
-              port: 8000
-            initialDelaySeconds: 20
-            periodSeconds: 10
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

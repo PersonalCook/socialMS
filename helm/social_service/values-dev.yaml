@@ -1,0 +1,64 @@
+replicaCount: 1
+
+image:
+  repository: piasotlar/social_service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+podAnnotations: {}
+
+service:
+  type: ClusterIP
+  port: 8000
+  targetPort: 8000
+
+configMap:
+  enabled: true
+  data:
+    CORS_ORIGINS: "http://localhost:5173"
+    JWT_ALGORITHM: "HS256"
+    RECIPE_SERVICE_URL: "http://recipe-service:8000/recipes"
+    USER_SERVICE_URL: "http://user-service:8000/users"
+
+env:
+  - name: DATABASE_URL
+    valueFrom:
+      secretKeyRef:
+        name: social-service-db
+        key: DATABASE_URL
+
+  - name: JWT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: app-secrets
+        key: jwt-secret
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 10
+  periodSeconds: 10
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8000
+  initialDelaySeconds: 20
+  periodSeconds: 10
+
+resources: {}
+
+serviceMonitor:
+  enabled: true
+  namespace: monitoring
+  labels:
+    release: monitoring
+  path: /metrics
+  interval: 15s
+  scheme: http
